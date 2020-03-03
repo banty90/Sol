@@ -54,13 +54,6 @@ body { margin: 0; padding: 0; font-family: helvetica, arial, sans-serif; }
 	text-align: left; font-size: 70% !important;
 }
 
-#notification {
-	width: 488px; 
-	border: 2px solid #333; border-top: 0; border: 0;
-	color: #454545; background: white;
-	font-size: .8em; padding: 3px;
-}
-
 .card { position: absolute;
 	width: 54px; height: 84px;
 	border: 2px solid #333;

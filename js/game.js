@@ -1,14 +1,5 @@
 // global variables
 var Sol = {
-    __description__: 'I hacked up a solitaire game in HTML, CSS and JavaScript with jQuery and (almost) no images.\n \nFor now it follows the simplest Klondike rules: turn one card at a time, with no limit on passes through the deck.',
-    __version__: 0.21,
-    __author__: 'Ryan McGreal',
-    __releasedate__: '2011-10-05',
-    __homepage__: 'http://quandyfactory.com/projects/74/solitaire',
-    __copyright__: '(C) 2011 by Ryan McGreal',
-    __licence__: 'GNU General Public Licence, Version 2',
-    __licence_url__: 'http://www.gnu.org/licenses/old-licenses/gpl-2.0.html',
-
     margin: 10, // normal space between objects on the board
     padding: 2, // normal padding inside an object
     suits: 'hearts diams clubs spades'.split(' '),
@@ -16,7 +7,7 @@ var Sol = {
     zIndex: 51, // initialize zIndex so we can always put cards on top of each other
     score: 0, // increment by 1 each time you put a card on the foundation, decrement by 1 when you remove a card
     moves: 0, // number of moves in current game
-    debugMode: false, // set to true to send details to console.log
+    debugMode: true, // set to true to send details to console.log
     deck: [],
     history: []
 };
@@ -24,25 +15,19 @@ var Sol = {
 Sol['width'] = 54 + (Sol.padding * 2) + Sol.margin; // width of a card bed + margin
 Sol['height'] = 84 + (Sol.padding * 2) + Sol.margin; // height of a card bed + margin
 
+/*
 for (val in Sol) {
     if (Sol.hasOwnProperty(val)) {
         log('Sol.'+val+'='+Sol[val]);
     }
 }
-
+*/
 // create and shuffle a new deck
-Sol.deck = makeDeck(); 
+Sol.deck = makeDeck();  // will return an array of objects with each card properties
 Sol.deck = shuffle(Sol.deck); 
 
 $(document).ready(function(){
-     /*$('#board').noisy({
-        intensity: 0.9,
-        size: 200,
-        opacity: 0.1,
-        monochrome: false
-    });*/
     Sol.deck = startGame(Sol.deck);
-    
     Sol.deck = playGame(Sol.deck);
     
 });
@@ -52,321 +37,31 @@ function startGame(deck) {
     
     // clear the board
     $('#board').html('');
-    
     addTools();
     addScore();
     addMoves();
-    
-    // add foundations
+   // add foundations
     addFoundation();
     addPlayingArea();
     addStockWaste();
     
     // load the cards into the stock
-    deck = loadCards(deck);
+   deck = loadCards(deck); // will return a set of 51 divs with their properties as in css.
     
     // deal the cards onto the playing area
-    deck = deal(deck);
+deck = deal(deck);
 
     return deck;
 }
 
-function addTools() {
-    // adds restart and redeal buttons
-    $('#board').append($('<div id="tools"></div>'));
-    
-    $('#tools').append($('<button id="undo" title="Undo the last move">Undo</button>'));
-    $('#tools').append($('<button id="restart" title="Start this game over again">Restart</button>'));
-    $('#tools').append($('<button id="redeal" title="Shuffle the deck and start a new game">New</button>'));
-    // finish() is not ready yet
-    // $('#tools').append($('<button id="finish" title="Finish off the game (once all the cards are turned up)">Finish</button>'));
-    $('#tools').append($('<button id="rules" title="Instructions on how to play the game">Rules</button>'));
-    $('#tools').append($('<button id="about" title="About this game">About</button>'));
-    
-    $('#undo').click(undo);
-    $('#restart').click(restart); 
-    $('#redeal').click(redeal); 
-    $('#finish').click(finish);
-    $('#about').click(about);
-    $('#rules').click(rules);
-}
-
-
-function deepCopy(obj) {
-    // javascript has no easy way to do a deep copy of an object
-    // function source: http://snipplr.com/view/15407/deep-copy-an-array-or-object/
-    if (Object.prototype.toString.call(obj) === '[object Array]') {
-        var out = [], i = 0, len = obj.length;
-        for ( ; i < len; i++ ) {
-            out[i] = arguments.callee(obj[i]);
-        }
-        return out;
-    }
-    if (typeof obj === 'object') {
-        var out = {}, i;
-        for ( i in obj ) {
-            out[i] = arguments.callee(obj[i]);
-        }
-        return out;
-    }
-    return obj;
-}
-
-
-function addHistory(deck) {
-    // adds a snapshot of the deck to the Sol.history array
-    var myCopy = deepCopy(deck);
-    Sol.history.push(myCopy);
-    log('pushed deck to history: ');
-    log(deck);
-}
-
-function undo() {
-    // pulls the previous deck state out of Sol.history and resets the cards to that state
-    
-    // 0. Check length of history
-    if (Sol.history.length == 1) {
-        notify('You are at the first move.');
-        return;
-    }
-
-    log('Deck: ');
-    log(Sol.deck);
-
-    // 1. Pop the current deck out of history
-    Sol.history.pop();
-
-    // 2. Make the deck equal to the previous history
-    Sol.deck = Sol.history[Sol.history.length-1];
-    
-    // 3. Reposition the cards in their previous locations
-    for (var c=0; c<Sol.deck.length; c++) {
-        var card = Sol.deck[c];
-        log(printObject(card));
-        $('#'+card.id)
-            .css('left', card.posX)
-            .css('top', card.posY)
-            .css('zIndex', card.zIndex)
-            .css('color', card.colour);
-        if (card.face == 'up') {
-            $('#'+card.id)
-                .css('background', 'white')
-                .html(card.val + '&' + card.suit + ';');
-        } else {
-            $('#'+card.id)
-                .html('')
-                .css('background', '')
-                .css('background-image', 'url(img/tile.png');
-        }
-    }
-    
-    // 4. Cycle through the deck, remove all existing event handlers and re-add them
-    for (i=0; i < Sol.deck.length; i++ ) {
-        // $('#'+Sol.deck[i].id).unbind(); // remove any existing handler
-        log('Attaching handlers to card ' + i + '; id ' + Sol.deck[i].id);
-        attachHandlers(i); // attach proper handler for its position and face
-    }
-    
-    
-    // 5. Update Score
-    var foundationCards = 0; // initialize
-    for (i=0; i < Sol.deck.length; i++) {
-        if (Sol.deck[i].location == 'foundation') {
-            foundationCards += 1;
-        }
-    }
-    Sol.score = foundationCards;
-    updateScore(Sol.score);
-    
-    // 6. Decrement number of moves
-    Sol.moves -= 1;
-    updateMoves(Sol.moves);
-    
-    log('Sol.deck: ');
-    log(Sol.deck);
-    notify('You undid your last move.');
-}
-
-function rules() {
-    // adds an overlay with instructions on how to play the game
-    $('#about_pane').remove(); // just in case
-    $('#rules_pane').remove(); // just in case
-    var output = [];
-    output.push('<div id="rules_pane" title="Click on this pane to close it.">');
-    output.push('<h2>Instructions</h2>');
-    output.push('<ul>');
-    output.push('<li>The object is to move all the cards face-up into the <strong>foundation</strong> (the four empty beds on the top right of the board) in ascending order by suit.</li>');
-    output.push('<li>The <strong>stock</strong> is the pile of face-down cards in the top left corner.</li>');
-    output.push('<li>The <strong>waste</strong> is the spot next to the deck where you can turn cards up.</li>');
-    output.push('<li>The <strong>playing area</strong> is the seven groups of cards along the bottom.</li>');
-    output.push('<li>Click-and-hold to drag a face-up card on top of another card or into an empty bed.</li>');
-    output.push('<li>Only an Ace can go onto an empty foundation bed.</li>');
-    output.push('<li>Only a King can go onto an empty playing area bed.</li>');
-    output.push('<li>You can only drag a face-up card onto another face-up card in the playing area if the card beneath is the opposite colour and the next number up. E.g. you can drag a 5 of hearts onto a 6 of clubs.</li>');
-    output.push('<li>Click a face-down card in the stock to turn it over into the waste. Cards in the stock turn over one at a time, with no limit on passes through the deck.</li>');
-    output.push('<li>Click the empty stock to turn the cards back from the waste.</li>');
-    output.push('<li>Click a face-fown card in the playing area to turn it over, as long as there is no card on top of it.</li>');
-    output.push('<li>Double-click a card to move it onto the foundation automatically if it can go there.</li>');
-    output.push('<li>If you want to start over with the same hand, click the "Restart" button.</li>');
-    output.push('<li>If you want to shuffle and redeal the cards, click the "New Game" button.</li>');
-    output.push('</ul>');
-    $('body').append($(output.join('\n')));
-    $('#rules_pane')
-        .mouseenter(function() {
-            $('#rules_pane').css('cursor', 'pointer');
-        })
-        .click(function() {
-        $('#rules_pane').remove();
-    });
-}    
-    
-function about() {
-    // adds an overlay explaining about the game
-    $('#about_pane').remove(); // just in case
-    $('#rules_pane').remove(); // just in case
-    var output = [];
-    output.push('<div id="about_pane" title="Click on this pane to close it.">');
-    output.push('<h2>About this Game</h2>');
-    output.push('<p>' + Sol.__description__.replace('\n', '<br>') + '</p>');
-    output.push('<ul>');
-    output.push('<li>Author: ' + Sol.__author__ + '</li>');
-    output.push('<li>Copyright: ' + Sol.__copyright__ + '</li>');
-    output.push('<li><a target="_blank" href="' + Sol.__licence_url__ + '">' + Sol.__licence__ + '</a></li>');
-    output.push('<li>Version: ' + Sol.__version__ + ', released ' + Sol.__releasedate__ + '</li>');
-    output.push('<li>Homepage: <a target="_blank" href="' + Sol.__homepage__ + '">' + Sol.__homepage__ + '</a></li>');
-    output.push('</ul>');
-    output.push('</div>');
-    $('body').append($(output.join('\n')));
-    $('#about_pane')
-        .mouseenter(function() {
-            $('#about_pane').css('cursor', 'pointer');
-        })
-        .click(function() {
-        $('#about_pane').remove();
-    });
-}
-
-function addScore() {
-    // adds a score notification to the board
-    Sol.score = 0; // reset score
-    $('#board').append($('<div id="score">Score: ' + Sol.score + '</div>'));
-}
-
-function updateScore(newval) {
-    // updates the score notification
-    $('#score').html('Score: ' + newval);
-    if (newval == 52) {
-        var answer = confirm('You won the game! Click OK to deal a new hand.');
-    }
-    if (answer) {
-        redeal();
-    }
-    log('score=' + newval);
-}
-
-function addMoves() {
-    // adds a number of moves to the board
-    Sol.moves = 0; // reset moves
-    $('#board').append($('<div id="moves">Moves: ' + Sol.moves + '</div>'));
-}
-
-function updateMoves(newval) {
-    // updates the moves notification
-    $('#moves').html('Moves: ' + newval);
-    log('moves=' + newval);
-}
-
-function finish() {
-    // moves all the remaining cards up to the foundation
-    // only works if every card is face-up
-    log('in finish()');
-    for (var i = 0; i < Sol.deck.length; i++) {
-        if (Sol.deck[i].face == 'down') {
-            notify('Sorry, but all cards must be face-up to finish the game');
-            log('card ' + Sol.deck[i].id + ' is face-down.');
-            return false;
-        }
-    }
-    
-    // all the cards are face-up. Yay, we can now finish the game.
-    Sol.deck.sort(dynamicSort('valNum'));
-    
-    for (var i = Sol.deck.length-1; i > -1; i--) {
-        log('Finishing ' + printObject(Sol.deck[i]));
-        if (Sol.deck[i].location != 'foundation') {
-            $('#'+Sol.deck[i].id).bind('dblclick', doDoubleClick)
-                .trigger('dblclick');
-        }
-    }
-}
-
-function dynamicSort(property) {
-    return function (a,b) {
-        return (a[property] < b[property]) ? -1 : (a[property] > b[property]) ? 1 : 0;
-    }
-}
-
-function redeal() {
-    // reshuffles the deck and deals a new hand
-    Sol.deck = makeDeck();
-    Sol.deck = shuffle(Sol.deck);
-    Sol.deck = startGame(Sol.deck);
-    Sol.moves = 0;
-    Sol.score = 0;
-    playGame(Sol.deck);
-    notify('You started a new game.');
-}
-
-function restart() {
-    // redeals the currently shuffled deck
-    Sol.history = []; // reset history
-    Sol.deck = startGame(Sol.deck); // deal the cards
-    Sol.moves = 0;
-    SOl.score = 0;
-    playGame(Sol.deck);
-    notify('You restarted this game.');
-}
-
-function addFoundation() {
-    // adds the foundation beds, where the cards end up sorted by suit and ascending from Ace
-    for (var i = 0; i < 4; i++ ) {
-        var distFromLeft = 204;
-        var thisWidth = distFromLeft + (Sol.width*i) + Sol.margin;
-        $('#board').append($('<div class="bed" title="Foundation" id="foundation_' + i + '" style="top: ' + Sol.margin + 'px; left: ' + thisWidth + 'px;"></div>'));
-        var thisPos = $('#foundation_' + i).position();
-        log('in addFoundation(); foundation_' + i + ' - ' + thisPos.left + ', ' + thisPos.top);
-    }
-}
-
-function addPlayingArea() {
-    // add the playing area beds, where the cards are dealt
-    for (var i=0; i<7; i++ ) {
-        var thisWidth = (Sol.width*i) + Sol.margin;
-        var thisheight = Sol.height + Sol.margin;
-        $('#board').append($('<div class="bed" title="Playing Area" id="play_' + i + '" style="top: ' + thisheight + 'px; left: ' + thisWidth + 'px;"></div>'));
-    }
-}
-
-function addStockWaste() {
-    // add the stock and waste beds
-    for (var i=0; i<2; i++ ) {
-        var thisWidth = (Sol.width*i) + Sol.margin;
-        if (i == 0) {
-            var thisId = 'stock';
-        } else {
-            var thisId = 'waste';
-        }
-        $('#board').append($('<div class="bed" title="' + pcase(thisId) + '" id="' + thisId + '" style="top: ' + Sol.margin + 'px; left: ' + thisWidth + 'px;"></div>'));
-    }
-}
 
 function makeDeck() {
     // creates and returns a deck of cards
-    var deck = [];
-    var id = 0;
-    for (var s=0; s < Sol.suits.length; s++ ) {
-        for (var v=0; v < Sol.vals.length; v++ ) {
-            var colour = 'red';
+    let deck = [];
+    let id = 0;
+    for (let s=0; s < Sol.suits.length; s++ ) {
+        for (let v=0; v < Sol.vals.length; v++ ) {
+            let colour = 'red';
             if ((Sol.suits[s] === 'clubs') || (Sol.suits[s] === 'spades')) {
                 colour = 'black';
             }
@@ -393,10 +88,12 @@ function makeDeck() {
     return deck;
 }
 
+
 function shuffle(deck) {
     // shuffles a deck of cards
     // uses Fisher-Yates shuffle algorithm. Source: http://sedition.com/perl/javascript-fy.html
     var i = deck.length;
+    console.log(i);
     if (i == 0) {
         return deck;
     }
@@ -419,11 +116,9 @@ function loadCards(deck) {
     // loads the cards onto the stock before dealing
     for (var i = 0; i < deck.length; i++ ) {
         $('#board').append(
-            $('<div class="card" style="top: ' + Sol.margin + 'px; left: ' + Sol.margin + 'px;"></div>')
-            .css('color', deck[i].colour)
-            .css('zIndex', i)
+            $('<div class="card"></div>')
+            .css({'top':Sol.margin + 'px','left':Sol.margin+ 'px','color': deck[i].colour,'zIndex': i,'position': 'absolute'})
             .attr('id', 'card-' + i)
-            .css('position', 'absolute')
         );
         $('#card-' + i).unbind(); // remove any event handlers from before
         log('in loadCards(); unbinding events from card-' + i);
@@ -478,6 +173,7 @@ function deal(deck) {
     return deck;    
 }
 
+
 function playGame(deck) {
     // main function to enable game play
     for (i=0; i < deck.length; i++ ) {
@@ -491,6 +187,62 @@ function playGame(deck) {
         .click(restoreStock);
     return deck;
 }
+
+
+
+function addTools() {
+    // adds restart and redeal buttons
+    $('#board').append($('<div id="tools"></div>'));
+    
+    $('#tools').append($('<button id="undo" title="Undo the last move">Undo</button>'));
+    $('#tools').append($('<button id="restart" title="Start this game over again">Restart</button>'));
+    $('#tools').append($('<button id="redeal" title="Shuffle the deck and start a new game">New</button>'));
+    // finish() is not ready yet
+    // $('#tools').append($('<button id="finish" title="Finish off the game (once all the cards are turned up)">Finish</button>'));
+        $('#undo').click(undo);
+    $('#restart').click(restart); 
+    $('#redeal').click(redeal); 
+    $('#finish').click(finish);
+   
+}
+
+
+function addFoundation() {
+    // adds the foundation beds, where the cards end up sorted by suit and ascending from Ace
+    for (var i = 0; i < 4; i++ ) {
+        var distFromLeft = 204;
+        var thisWidth = distFromLeft + (Sol.width*i) + Sol.margin;
+        $('#board').append($('<div class="bed" title="Foundation" id="foundation_' + i + '" style="top: ' + Sol.margin + 'px; left: ' + thisWidth + 'px;"></div>'));
+        var thisPos = $('#foundation_' + i).position();
+        log('in addFoundation(); foundation_' + i + ' - ' + thisPos.left + ', ' + thisPos.top);
+    }
+}
+
+function addPlayingArea() {
+    // add the playing area beds, where the cards are dealt
+    for (var i=0; i<7; i++ ) {
+        var thisWidth = (Sol.width*i) + Sol.margin;
+        var thisheight = Sol.height + Sol.margin;
+        $('#board').append($('<div class="bed" title="Playing Area" id="play_' + i + '" style="top: ' + thisheight + 'px; left: ' + thisWidth + 'px;"></div>'));
+    }
+}
+
+function addStockWaste() {
+    // add the stock and waste beds
+    for (var i=0; i<2; i++ ) {
+        var thisWidth = (Sol.width*i) + Sol.margin;
+        if (i == 0) {
+            var thisId = 'stock';
+        } else {
+            var thisId = 'waste';
+        }
+        $('#board').append($('<div class="bed" title="' + pcase(thisId) + '" id="' + thisId + '" style="top: ' + Sol.margin + 'px; left: ' + thisWidth + 'px;"></div>'));
+    }
+}
+
+
+
+
 
 function attachHandlers(i) {
     // attches event handlers to cards by index
@@ -538,7 +290,7 @@ function makeDraggable(id) {
         .attr('title', 'Click and drag this card to another location');
     })
     .draggable({ 
-        delay: 50,
+        delay: 0,
         opacity: 0.8, 
         zIndex: 1000000, 
         containment: 'parent', 
@@ -719,6 +471,68 @@ function dragStop() {
     $('#' + this_id).css('display', 'block'); // restore visibility after hiding
 }
 
+
+function turnStock() {
+    // turn a card from the stock onto the waste
+    
+    Sol.moves += 1;
+    updateMoves(Sol.moves);
+    
+    var thisId = parseInt(this.id.replace('card-', ''));
+    // first, get the id of the waste
+    var thisWaste = document.elementFromPoint(88, 20);
+    var thisZindex = $('#' + thisWaste.id).css('zIndex');
+    if (thisZindex == 'auto') {
+        thisZindex = 1;
+    } else {
+        thisZindex = parseInt(thisZindex);
+    }
+    // now update the card properties in the deck
+    Sol.deck[thisId].zIndex = thisZindex + 1;
+    Sol.deck[thisId].posX = 78;
+    Sol.deck[thisId].posY = 10;
+    Sol.deck[thisId].face = 'up';
+    Sol.deck[thisId].location = 'waste';
+    // now update the div corresponding to the card
+    $(this)
+        .css('left', Sol.deck[thisId].posX + 'px')
+        .css('top', Sol.deck[thisId].posY + 'px')
+        .css('background', 'white')
+        .css('zIndex', Sol.deck[thisId].zIndex)
+        .html(Sol.deck[thisId].val + '&' + Sol.deck[thisId].suit + ';');
+    makeDraggable(this.id);
+    // don't forget to remove the click event handler from when it was on the stock
+    $(this).unbind('click');
+    notify('You moved the ' + displayVal(Sol.deck[thisId].val) + ' of ' + displaySuit(Sol.deck[thisId].suit) + ' from the stock to the waste.');
+    addHistory(Sol.deck);
+}
+
+function flipCard() {
+    // this flips over a turned-down card in the play area
+    
+    Sol.moves += 1;
+    updateMoves(Sol.moves);
+    
+    var thisId = parseInt(this.id.replace('card-', ''));
+    
+    log('Click fired on ' + thisId);
+    // make sure there aren't any cards on top of this card
+    var elem = document.elementFromPoint(Sol.deck[thisId].posX + 10, Sol.deck[thisId].posY + 30);
+    log('this.id = ' + this.id +  ', Sol.deck[thisId].posX + 10=' +  Sol.deck[thisId].posX + 10 + ', Sol.deck[thisId].posY + 30=' +  Sol.deck[thisId].posY + 30 +  ', elem.id=' +  elem.id);
+    if (elem.id == this.id) {
+        Sol.deck[thisId].face = 'up';
+        log(Sol.deck[thisId]);
+        $('#' + this.id)
+            .css('background', 'white')
+            .html(Sol.deck[thisId].val + '&' + Sol.deck[thisId].suit + ';');
+        makeDraggable(this.id);
+        notify('You flipped over the ' + displayVal(Sol.deck[thisId].val) + ' of ' + displaySuit(Sol.deck[thisId].suit) + '.');
+    } else {
+        notify('You cannot flip a card that is covered by another card.');
+    }
+    addHistory(Sol.deck);
+}
+
 function findCardFromId(id) {
     // returns an object from the deck with a given id
     for (var i=0; i<Sol.deck.length; i++ ) {
@@ -820,67 +634,6 @@ function putCardOnCard(this_card_id, under_card_id) {
     addHistory(Sol.deck);
 }
 
-function turnStock() {
-    // turn a card from the stock onto the waste
-    
-    Sol.moves += 1;
-    updateMoves(Sol.moves);
-    
-    var thisId = parseInt(this.id.replace('card-', ''));
-    // first, get the id of the waste
-    var thisWaste = document.elementFromPoint(88, 20);
-    var thisZindex = $('#' + thisWaste.id).css('zIndex');
-    if (thisZindex == 'auto') {
-        thisZindex = 1;
-    } else {
-        thisZindex = parseInt(thisZindex);
-    }
-    // now update the card properties in the deck
-    Sol.deck[thisId].zIndex = thisZindex + 1;
-    Sol.deck[thisId].posX = 78;
-    Sol.deck[thisId].posY = 10;
-    Sol.deck[thisId].face = 'up';
-    Sol.deck[thisId].location = 'waste';
-    // now update the div corresponding to the card
-    $(this)
-        .css('left', Sol.deck[thisId].posX + 'px')
-        .css('top', Sol.deck[thisId].posY + 'px')
-        .css('background', 'white')
-        .css('zIndex', Sol.deck[thisId].zIndex)
-        .html(Sol.deck[thisId].val + '&' + Sol.deck[thisId].suit + ';');
-    makeDraggable(this.id);
-    // don't forget to remove the click event handler from when it was on the stock
-    $(this).unbind('click');
-    notify('You moved the ' + displayVal(Sol.deck[thisId].val) + ' of ' + displaySuit(Sol.deck[thisId].suit) + ' from the stock to the waste.');
-    addHistory(Sol.deck);
-}
-
-function flipCard() {
-    // this flips over a turned-down card in the play area
-    
-    Sol.moves += 1;
-    updateMoves(Sol.moves);
-    
-    var thisId = parseInt(this.id.replace('card-', ''));
-    
-    log('Click fired on ' + thisId);
-    // make sure there aren't any cards on top of this card
-    var elem = document.elementFromPoint(Sol.deck[thisId].posX + 10, Sol.deck[thisId].posY + 30);
-    log('this.id = ' + this.id +  ', Sol.deck[thisId].posX + 10=' +  Sol.deck[thisId].posX + 10 + ', Sol.deck[thisId].posY + 30=' +  Sol.deck[thisId].posY + 30 +  ', elem.id=' +  elem.id);
-    if (elem.id == this.id) {
-        Sol.deck[thisId].face = 'up';
-        log(Sol.deck[thisId]);
-        $('#' + this.id)
-            .css('background', 'white')
-            .html(Sol.deck[thisId].val + '&' + Sol.deck[thisId].suit + ';');
-        makeDraggable(this.id);
-        notify('You flipped over the ' + displayVal(Sol.deck[thisId].val) + ' of ' + displaySuit(Sol.deck[thisId].suit) + '.');
-    } else {
-        notify('You cannot flip a card that is covered by another card.');
-    }
-    addHistory(Sol.deck);
-}
-
 function notify(message) {
     // sends a message to the notification area
     $('#notification').html(message).fadeOut('fast').fadeIn('slow');
@@ -968,3 +721,180 @@ function pcase(string) {
     return string.charAt(0).toUpperCase() + string.slice(1);
 }
 
+function addHistory(deck) {
+    // adds a snapshot of the deck to the Sol.history array
+    var myCopy = deepCopy(deck);
+    Sol.history.push(myCopy);
+    log('pushed deck to history: ');
+    log(deck);
+}
+
+function undo() {
+    // pulls the previous deck state out of Sol.history and resets the cards to that state
+    
+    // 0. Check length of history
+    if (Sol.history.length == 1) {
+        notify('You are at the first move.');
+        return;
+    }
+
+    log('Deck: ');
+    log(Sol.deck);
+
+    // 1. Pop the current deck out of history
+    Sol.history.pop();
+
+    // 2. Make the deck equal to the previous history
+    Sol.deck = Sol.history[Sol.history.length-1];
+    
+    // 3. Reposition the cards in their previous locations
+    for (var c=0; c<Sol.deck.length; c++) {
+        var card = Sol.deck[c];
+        log(printObject(card));
+        $('#'+card.id)
+            .css('left', card.posX)
+            .css('top', card.posY)
+            .css('zIndex', card.zIndex)
+            .css('color', card.colour);
+        if (card.face == 'up') {
+            $('#'+card.id)
+                .css('background', 'white')
+                .html(card.val + '&' + card.suit + ';');
+        } else {
+            $('#'+card.id)
+                .html('')
+                .css('background', '')
+                .css('background-image', 'url(img/tile.png');
+        }
+    }
+    
+    // 4. Cycle through the deck, remove all existing event handlers and re-add them
+    for (i=0; i < Sol.deck.length; i++ ) {
+        // $('#'+Sol.deck[i].id).unbind(); // remove any existing handler
+        log('Attaching handlers to card ' + i + '; id ' + Sol.deck[i].id);
+        attachHandlers(i); // attach proper handler for its position and face
+    }
+    
+    
+    // 5. Update Score
+    var foundationCards = 0; // initialize
+    for (i=0; i < Sol.deck.length; i++) {
+        if (Sol.deck[i].location == 'foundation') {
+            foundationCards += 1;
+        }
+    }
+    Sol.score = foundationCards;
+    updateScore(Sol.score);
+    
+    // 6. Decrement number of moves
+    Sol.moves -= 1;
+    updateMoves(Sol.moves);
+    
+    log('Sol.deck: ');
+    log(Sol.deck);
+    notify('You undid your last move.');
+}
+
+
+function addScore() {
+    // adds a score notification to the board
+    Sol.score = 0; // reset score
+    $('#board').append($('<div id="score">Score: ' + Sol.score + '</div>'));
+}
+
+function updateScore(newval) {
+    // updates the score notification
+    $('#score').html('Score: ' + newval);
+    if (newval == 52) {
+        var answer = confirm('You won the game! Click OK to deal a new hand.');
+    }
+    if (answer) {
+        redeal();
+    }
+    log('score=' + newval);
+}
+
+function addMoves() {
+    // adds a number of moves to the board
+    Sol.moves = 0; // reset moves
+    $('#board').append($('<div id="moves">Moves: ' + Sol.moves + '</div>'));
+}
+
+function updateMoves(newval) {
+    // updates the moves notification
+    $('#moves').html('Moves: ' + newval);
+    log('moves=' + newval);
+}
+
+function finish() {
+    // moves all the remaining cards up to the foundation
+    // only works if every card is face-up
+    log('in finish()');
+    for (var i = 0; i < Sol.deck.length; i++) {
+        if (Sol.deck[i].face == 'down') {
+            notify('Sorry, but all cards must be face-up to finish the game');
+            log('card ' + Sol.deck[i].id + ' is face-down.');
+            return false;
+        }
+    }
+    
+    // all the cards are face-up. Yay, we can now finish the game.
+    Sol.deck.sort(dynamicSort('valNum'));
+    
+    for (var i = Sol.deck.length-1; i > -1; i--) {
+        log('Finishing ' + printObject(Sol.deck[i]));
+        if (Sol.deck[i].location != 'foundation') {
+            $('#'+Sol.deck[i].id).bind('dblclick', doDoubleClick)
+                .trigger('dblclick');
+        }
+    }
+}
+
+function dynamicSort(property) {
+    return function (a,b) {
+        return (a[property] < b[property]) ? -1 : (a[property] > b[property]) ? 1 : 0;
+    }
+}
+
+function redeal() {
+    // reshuffles the deck and deals a new hand
+    Sol.deck = makeDeck();
+    Sol.deck = shuffle(Sol.deck);
+    Sol.deck = startGame(Sol.deck);
+    Sol.moves = 0;
+    Sol.score = 0;
+    playGame(Sol.deck);
+    notify('You started a new game.');
+}
+
+function restart() {
+    // redeals the currently shuffled deck
+    Sol.history = []; // reset history
+    Sol.deck = startGame(Sol.deck); // deal the cards
+    Sol.moves = 0;
+    SOl.score = 0;
+    playGame(Sol.deck);
+    notify('You restarted this game.');
+}
+
+
+
+function deepCopy(obj) {
+    // javascript has no easy way to do a deep copy of an object
+    // function source: http://snipplr.com/view/15407/deep-copy-an-array-or-object/
+    if (Object.prototype.toString.call(obj) === '[object Array]') {
+        var out = [], i = 0, len = obj.length;
+        for ( ; i < len; i++ ) {
+            out[i] = arguments.callee(obj[i]);
+        }
+        return out;
+    }
+    if (typeof obj === 'object') {
+        var out = {}, i;
+        for ( i in obj ) {
+            out[i] = arguments.callee(obj[i]);
+        }
+        return out;
+    }
+    return obj;
+}
